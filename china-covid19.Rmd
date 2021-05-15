@@ -1,0 +1,19 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r warning=FALSE, message=FALSE}
+library(tidyverse)
+
+## Data Readin
+covid_data_raw <- read_csv("owid-covid-data.csv")
+covid_stringency_raw <- read_csv("covid-stringency-index.csv")
+gdi_raw <- read_csv("f236b9a8-c325-4bf5-a685-86d3df7c8542_Data.csv")
+
+```
+
