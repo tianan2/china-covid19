@@ -1,6 +1,8 @@
 ---
 title: "Untitled"
 output: html_document
+editor_options: 
+  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
@@ -9,11 +11,229 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r warning=FALSE, message=FALSE}
 library(tidyverse)
+library(janitor)
+library(lubridate)
+library(scales)
+library(readxl)
+library(stargazer)
+library(ggrepel)
+theme_set(theme_classic())
+options(scipen = 100)
 
-## Data Readin
-covid_data_raw <- read_csv("owid-covid-data.csv")
-covid_stringency_raw <- read_csv("covid-stringency-index.csv")
-gdi_raw <- read_csv("f236b9a8-c325-4bf5-a685-86d3df7c8542_Data.csv")
+## Data Load
+covid_owid_raw <- read_csv("owid-covid-data.csv")
+covid_stringency_raw <- read_csv("covid-stringency-index.csv") %>% clean_names()
+covid_coronanet_raw <- read_csv("coronanet_release.csv")
+gdi_raw <- read_csv("f236b9a8-c325-4bf5-a685-86d3df7c8542_Data.csv") %>% clean_names()
+polity_raw <- read_excel("p5v2018.xls")
 
 ```
+
+## Read in and clean WGI
+
+```{r}
+gdi_cleaned <- gdi_raw %>% 
+  filter(series_name == "Government Effectiveness: Estimate") %>% 
+  mutate_at(vars(matches("^x")), as.numeric) %>% 
+  pivot_longer(cols = x1996_yr1996: x2019_yr2019, names_to = "year", values_to = "gov_effectiveness") %>% 
+  mutate(year = as.numeric(str_extract(year, "\\d...")))
+
+gdi_cleaned %>% 
+  filter(country_name == "China") %>% 
+  ggplot(aes(year, gov_effectiveness)) +
+  geom_line()
+
+gdi_selected <- gdi_cleaned %>% 
+  filter(year == 2019) %>% 
+  select(country_name, country_code, gov_effectiveness)
+```
+## Load and clean polity dataset
+
+```{r}
+polity_selected <- polity_raw %>% 
+  filter(year == 2018) %>% 
+  select(country, polity2, scode) %>% 
+  mutate(country = recode(country, "Russia" = "Russian Federation", 
+                          "Myanmar (Burma)" = "Myanmar", 
+                          "Kyrgyzstan" = "Kyrgyz Republic", 
+                          "Iran" = "Iran, Islamic Rep.", 
+                          "Egypt" = "Egypt, Arab Rep.", 
+                          "Korea South" = "Korea, Rep.", 
+                          "Syria" = "Syrian Arab Republic", 
+                          "Taiwan" = "Taiwan, China", 
+                          "UAE" = "United Arab Emirates", 
+                          "Venezuela" = "Venezuela, RB", 
+                          "Yemen" = "Yemen, Rep."))
+```
+
+## Load and clean owid-covid19-dataset
+
+```{r}
+covid_owid_joined <- covid_owid_raw %>% 
+  filter(!is.na(continent), 
+         !is.na(total_deaths_per_million), 
+         population > 1000000) %>% 
+  left_join(gdi_selected, by = c("iso_code" = "country_code")) %>% 
+  left_join(polity_selected, by = c("country_name" = "country")) %>% 
+  left_join(stringency_index_filtered, by = "location") %>% 
+  mutate(death_rate = total_deaths / total_cases)
+
+covid_owid_present <- covid_owid_joined %>% filter(date == "2021-05-01")
+```
+
+## Take a snapshot view of policy performance
+
+```{r}
+plot_variable <- function(tbl, day, column, column_2) {
+  tbl %>% 
+    filter(date == day) %>% 
+    ggplot(aes({{ column }}, {{ column_2 }})) +
+    geom_point(aes(size = total_deaths_per_million), alpha = .6) +
+    geom_smooth(method = "lm") +
+    scale_y_log10()
+}
+
+covid_owid_joined %>%
+  plot_variable(day = "2021-05-01", column = gov_effectiveness, column_2 = death_rate) +
+  geom_text_repel(data = country_df, aes(label = location), min.segment.length = 0, seed = 42, box.padding = 0.5) +
+  labs(title = "Does government effectiveness matter?", 
+       subtitle = "Government effectiveness and mortality rate", 
+       x = "WGI (government effectiveness)", 
+       y = "Mortality rate (death / confirmed case)", 
+       caption = "Data Source: Our World in Data, Worldwide Governance Indicator") +
+  theme(text = element_text(family = "Times"), 
+        plot.title = element_text(face = "bold", 
+                                  size = 15), 
+        legend.position = "bottom")
+ggsave(filename = "does_gov_effectiveness_matter.pdf", width = 8, height = 5)
+
+
+covid_owid_joined %>% 
+  plot_variable(day = "2021-05-01", column = stringency_index, column_2 = death_rate)
+
+covid_owid_joined %>% 
+  plot_variable(day = "2021-05-01", column = polity2, column_2 = death_rate)
+
+covid_owid_joined %>% 
+  plot_variable(day = "2021-05-01", value, stringency_index)
+```
+
+## Regression Analysis
+
+```{r}
+library(effects)
+
+model_1 <- lm(data = covid_owid_present, death_rate ~ log(population) + aged_65_older + gdp_per_capita + hospital_beds_per_thousand + gov_effectiveness * stringency_index)
+
+model_2 <- lm(data = covid_owid_present, death_rate ~ log(population) + aged_65_older + gdp_per_capita + hospital_beds_per_thousand + gov_effectiveness * stringency_index + polity2)
+
+model_3 <- lm(data = covid_owid_present, total_cases_per_million ~ log(population) + aged_65_older + gdp_per_capita + hospital_beds_per_thousand + gov_effectiveness * stringency_index) 
+
+model_4 <- lm(data = covid_owid_present, total_cases_per_million ~ log(population) + aged_65_older + gdp_per_capita + hospital_beds_per_thousand + gov_effectiveness * stringency_index + polity2) 
+
+stargazer(model_1, model_2, model_3, model_4, type = "html")
+
+effect(term = "gov_effectiveness", mod = model_1) %>% 
+  plot(type = "response", ylim=c(0,1), main = "Gov_effectiveness")
+```
+
+## How well has China done?
+
+```{r}
+library(ggrepel)
+
+country_df <- covid_owid_joined %>% 
+  filter(date == "2021-05-01") %>% 
+  filter(location %in% c("China", "Taiwan", "Vietnam", "Singapore", "Thailand", "South Korea", "Japan", "United States", "United Kingdom", "Germany", "Russia", "Italy", "France", "India", "Mexico"))
+  
+covid_owid_joined %>% 
+  ggplot(aes(total_cases_per_million, total_deaths_per_million)) +
+  geom_point() +
+  geom_text_repel(data = country_df, aes(label = location),min.segment.length = 0, seed = 42, box.padding = 0.5) +
+  scale_x_log10() +
+  scale_y_log10() +
+  labs(title = "How well has China done?", 
+       subtitle = "As of May 1, 2021",
+       caption = "Data Source: OECD Corona Tracker", 
+       x = "Total cases per million (log)", 
+       y = "Total deaths per million (log)")
+
+```
+
+
+
+```{r}
+covid_oecd_overtime <- covid_owid_joined %>% 
+  filter(!is.na(continent), 
+         !is.na(total_deaths_per_million), 
+         population > 5000000) %>% 
+  left_join(gdi_selected, by = c("iso_code" = "country_code")) %>% 
+  left_join(polity_selected, by = c("country_name" = "country")) %>% 
+  mutate(death_rate = total_deaths / total_cases)
+
+covid_oecd_overtime %>% 
+  filter(location %in% c("China", "Japan", "South Korea", "United States")) %>% 
+  ggplot(aes(date, new_cases, color = location)) +
+  geom_line() +
+  scale_y_log10()
+
+covid_oecd_overtime %>% 
+  ggplot(aes(stringency_index)) +
+  geom_histogram()
+
+stringency_index_filtered <- covid_oecd_overtime %>% 
+  filter(date > "2020-03-31", 
+         !is.na(stringency_index)) %>% 
+  group_by(location) %>% 
+  summarize(avg_stringency = mean(stringency_index))
+
+covid_oecd_joined %>% 
+  ggplot(aes(total_cases_per_million, avg_stringency)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  geom_text_repel(data = country_df, aes(label = location), min.segment.length = 0, seed = 42, box.padding = 0.5) +
+  scale_x_log10() 
+
+```
+
+## Coronanet policy response dataset
+
+```{r}
+covid_coronanet_raw %>% 
+  filter(init_country_level == "National") %>% 
+  count(country, sort = TRUE)
+
+covid_coronanet_raw %>% 
+  filter(type == "Declaration of Emergency") %>% 
+  count(country, sort = TRUE)
+
+coronanet_china <- covid_coronanet_raw %>% 
+  filter(country == "China")
+
+coronanet_china %>% 
+  ggplot(aes(date_announced)) +
+  geom_histogram()
+
+coronanet_china %>% 
+  count(init_country_level, sort = TRUE)
+
+coronanet_china %>% 
+  count(type, sort = T)
+  
+```
+
+## Stringency index
+
+```{r}
+covid_stringency_raw %>% 
+  filter(entity %in% c("China", "Japan", "United States")) %>% 
+  ggplot(aes(day, stringency_index, color = entity)) + 
+  geom_line(size = 1) +
+  scale_x_date(date_breaks = "2 months", 
+               date_labels = "%Y-%m")
+
+```
+
+
+
 
