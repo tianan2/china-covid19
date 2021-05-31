@@ -1,0 +1,62 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r warning=FALSE, message=FALSE}
+library(tidyverse)
+library(scales)
+library(lubridate)
+library(readxl)
+library(janitor)
+theme_set(theme_classic())
+
+qog_bas_cs_raw <- read_csv("qog_bas_cs_jan21.csv")
+qog_bas_ts_raw <- read_csv("qog_bas_ts_jan21.csv")
+bti_scores_raw <- read_excel("BTI 2020 Scores.xlsx") %>% clean_names() %>% rename("country" = "regions_1_east_central_and_southeast_europe_2_latin_america_and_the_caribbean_3_west_and_central_africa_4_middle_east_and_north_africa_5_southern_and_eastern_africa_6_post_soviet_eurasia_7_asia_and_oceania")
+```
+
+
+```{r}
+qog_bas_selected <- qog_bas_cs_raw %>% 
+  select(ccode, cname, ccodealp, icrg_qog, qs_closed, qs_impar, qs_proff) 
+
+```
+
+```{r}
+bti_selected <- bti_scores_raw %>% 
+  select(country, starts_with("q14")) 
+
+bti_selected %>% 
+  pivot_longer(-country, names_to = "category") %>% 
+  ggplot(aes(category, value)) +
+  geom_boxplot()
+```
+
+
+```{r}
+index_joind <- gdi_selected %>% 
+  left_join(bti_selected, by = c("country_name" = "country")) %>% 
+  left_join(qog_bas_selected, by = c("country_name" = "cname")) %>% 
+  select(country_name, gov_effectiveness, q14_steering_capability, icrg_qog, qs_impar) %>% 
+  mutate(across(-country_name, ~ as.numeric(scale(.))))
+
+china_index_joined <- index_joind %>% 
+  filter(country_name == "China") %>% 
+  pivot_longer(-country_name, names_to = "category")
+
+index_joind %>% 
+  pivot_longer(-country_name, names_to = "category") %>% 
+  ggplot(aes(value, category)) +
+  geom_boxplot() +
+  geom_point(data = china_index_joined, aes(value, category), shape = 5, size = 3, color = "black")
+  
+```
+
+
+
+

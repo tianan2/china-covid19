@@ -122,6 +122,7 @@ covid_owid_joined %>%
 
 ```{r}
 library(effects)
+library(broom)
 
 model_1 <- lm(data = covid_owid_present, death_rate ~ log(population) + aged_65_older + gdp_per_capita + hospital_beds_per_thousand + gov_effectiveness * stringency_index)
 
@@ -129,12 +130,31 @@ model_2 <- lm(data = covid_owid_present, death_rate ~ log(population) + aged_65_
 
 model_3 <- lm(data = covid_owid_present, total_cases_per_million ~ log(population) + aged_65_older + gdp_per_capita + hospital_beds_per_thousand + gov_effectiveness * stringency_index) 
 
-model_4 <- lm(data = covid_owid_present, total_cases_per_million ~ log(population) + aged_65_older + gdp_per_capita + hospital_beds_per_thousand + gov_effectiveness * stringency_index + polity2) 
+model_4 <- lm(data = covid_owid_present, total_cases_per_million ~ log(population) + aged_65_older + gdp_per_capita + hospital_beds_per_thousand + gov_effectiveness * stringency_index + polity2)
 
-stargazer(model_1, model_2, model_3, model_4, type = "html")
+stargazer(model_1, model_2, model_3, model_4, type = "text")
 
 effect(term = "gov_effectiveness", mod = model_1) %>% 
   plot(type = "response", ylim=c(0,1), main = "Gov_effectiveness")
+
+model_2 %>% 
+  tidy(conf.int = TRUE) %>% 
+  filter(term != "(Intercept)") %>% 
+  mutate(term = fct_reorder(term, -estimate)) %>% 
+  ggplot(aes(term, estimate)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high, width = .2)) +
+  geom_hline(aes(yintercept = 0), color = "red", lty = "dashed") +
+  coord_flip() +
+  labs(title = "Does government effectiveness matter?", 
+       subtitle = "Associations between different parameters and mortality rate", 
+       y = "Percentage change in mortalilty rate associated with a one-unit increase \n in parameter indices", 
+       x = " ", 
+       caption = "Data Source: OxCGRT, WGI, OWID") +
+  theme(text = element_text(family = "Times"), 
+        plot.title = element_text(face = "bold", size = 15))
+ggsave(file = "figs/does_government_effectiveness_matter.pdf", width = 8, height = 5)
+  
 ```
 
 ## How well has China done?
@@ -144,50 +164,71 @@ library(ggrepel)
 
 country_df <- covid_owid_joined %>% 
   filter(date == "2021-05-01") %>% 
-  filter(location %in% c("China", "Taiwan", "Vietnam", "Singapore", "Thailand", "South Korea", "Japan", "United States", "United Kingdom", "Germany", "Russia", "Italy", "France", "India", "Mexico"))
+  filter(location %in% c("China", "Taiwan", "Vietnam", "Singapore", "Thailand", "South Korea", "Japan", "United States", "United Kingdom", "Germany", "Russia", "Italy", "France", "India", "Mexico", "Burundi", "Tanzania"))
   
 covid_owid_joined %>% 
+  filter(date == "2021-05-01") %>%
   ggplot(aes(total_cases_per_million, total_deaths_per_million)) +
   geom_point() +
   geom_text_repel(data = country_df, aes(label = location),min.segment.length = 0, seed = 42, box.padding = 0.5) +
   scale_x_log10() +
-  scale_y_log10() +
-  labs(title = "How well has China done?", 
+  scale_y_log10() + 
+  annotate(geom = "rect", xmin = 0, xmax = 100, ymin = 0, ymax = 10, fill = "red", alpha = .2) +
+  annotate(geom = "text", x = 1, y = 15, label = "Suprisingly high performance", hjust = 0) +
+  labs(title = "Tatal number of confirmed cases and deaths", 
        subtitle = "As of May 1, 2021",
-       caption = "Data Source: OECD Corona Tracker", 
+       caption = "Data Source: Our World in Data", 
        x = "Total cases per million (log)", 
-       y = "Total deaths per million (log)")
-
+       y = "Total deaths per million (log)") +
+  theme(text = element_text(family = "Times"), 
+        plot.title = element_text(face = "bold", size = 15)) 
+ggsave(filename = "total_number_of_cases_and_deaths.pdf", width = 8, height = 5)
 ```
 
-
+## Trend in the number of new cases
 
 ```{r}
-covid_oecd_overtime <- covid_owid_joined %>% 
-  filter(!is.na(continent), 
-         !is.na(total_deaths_per_million), 
-         population > 5000000) %>% 
-  left_join(gdi_selected, by = c("iso_code" = "country_code")) %>% 
-  left_join(polity_selected, by = c("country_name" = "country")) %>% 
-  mutate(death_rate = total_deaths / total_cases)
-
-covid_oecd_overtime %>% 
+covid_owid_joined %>% 
   filter(location %in% c("China", "Japan", "South Korea", "United States")) %>% 
-  ggplot(aes(date, new_cases, color = location)) +
+  ggplot(aes(date, new_cases, lty = location)) +
   geom_line() +
-  scale_y_log10()
+  scale_y_log10(labels = comma) +
+  scale_x_date(date_breaks = "2 month", 
+               date_labels = "%y-%m", 
+               expand = c(0, 0)) +
+  labs(title = "Comparing the trend in the number of new cases on daily basis",
+       subtitle = "The number of new cases in China has fallen below 50 per day since Feb 2021",
+       x = NULL, 
+       y = "Daily total of confirmed cases (log)",
+       caption = "Data Source: Our World in Data") +
+  theme(text = element_text(family = "Times", size = 13), 
+        plot.title = element_text(face = "bold"), 
+        legend.position = "bottom", 
+        legend.title = element_blank())
+ggsave(filename = "figs/comparing_trend_number_of_new_cases.pdf", width = 8, height = 5)
 
-covid_oecd_overtime %>% 
+covid_owid_joined %>% 
+  filter(location == "China", 
+         date > "2021-01-01") %>% 
+  ggplot(aes(date, new_cases)) +
+  geom_line()
+```
+
+## Stringency trend 
+
+```{r}
+covid_oecd_joined %>% 
   ggplot(aes(stringency_index)) +
-  geom_histogram()
+  geom_histogram() 
 
-stringency_index_filtered <- covid_oecd_overtime %>% 
+stringency_index_filtered <- covid_owid_joined %>% 
   filter(date > "2020-03-31", 
          !is.na(stringency_index)) %>% 
   group_by(location) %>% 
   summarize(avg_stringency = mean(stringency_index))
 
-covid_oecd_joined %>% 
+covid_owid_joined %>% 
+  filter(date == "2020-05-01") %>% 
   ggplot(aes(total_cases_per_million, avg_stringency)) +
   geom_point() +
   geom_smooth(method = "lm") +
@@ -199,15 +240,67 @@ covid_oecd_joined %>%
 ## Coronanet policy response dataset
 
 ```{r}
-covid_coronanet_raw %>% 
-  filter(init_country_level == "National") %>% 
-  count(country, sort = TRUE)
+## data cleaning
 
-covid_coronanet_raw %>% 
-  filter(type == "Declaration of Emergency") %>% 
-  count(country, sort = TRUE)
+covid_coronanet_mutated <- covid_coronanet_raw %>% 
+  mutate(compliance = fct_collapse(compliance, mandatory_unspecified = c("Mandatory (Unspecified/Implied)", 
+                                                             "Mandatory (Other; please list other enforcement mechanisms in the text entry)", 
+                                                             "Mandatory with Exceptions (Please list exceptions in the text entry)", 
+                                                             "Mandatory (Unspecified/Implied),Mandatory with Exceptions (Please list exceptions in the text entry)", 
+                                                             "Mandatory (Unspecified/Implied),Mandatory (Other; please list other enforcement mechanisms in the text entry)", 
+                                                             "Mandatory (Unspecified/Implied),Voluntary/Recommended but No Penalties", 
+                                                             "Mandatory with Exceptions (Please list exceptions in the text entry),Mandatory (Other; please list other enforcement mechanisms in the text entry)", 
+                                                             "Mandatory with Exceptions (Please list exceptions in the text entry),Voluntary/Recommended but No Penalties", 
+                                                             "Mandatory (Unspecified/Implied),Mandatory with Exceptions (Please list exceptions in the text entry),Mandatory (Other; please list other enforcement mechanisms in the text entry)"), 
+                                   mandatory_jail_time = c("Mandatory with Legal Penalties (Jail Time)", 
+                                                           "Mandatory with Legal Penalties (Jail Time),Mandatory (Unspecified/Implied)", 
+                                                           "Mandatory with Legal Penalties (Jail Time),Mandatory with Fines", 
+                                                           "Mandatory with Legal Penalties (Jail Time),Mandatory with Exceptions (Please list exceptions in the text entry)", 
+                                                           "Mandatory with Legal Penalties (Jail Time),Mandatory (Other; please list other enforcement mechanisms in the text entry)", 
+                                                           "Mandatory with Legal Penalties (Jail Time),Mandatory with Fines,Mandatory (Unspecified/Implied)", 
+                                                           "Mandatory with Legal Penalties (Jail Time),Mandatory with Fines,Mandatory with Exceptions (Please list exceptions in the text entry)", 
+                                                           "Mandatory with Legal Penalties (Jail Time),Mandatory with Fines,Mandatory (Other; please list other enforcement mechanisms in the text entry)", 
+                                                           "Mandatory with Legal Penalties (Jail Time),Mandatory with Fines,Mandatory (Unspecified/Implied),Mandatory with Exceptions (Please list exceptions in the text entry)", 
+                                                           "Mandatory with Legal Penalties (Jail Time),Mandatory with Fines,Mandatory with Exceptions (Please list exceptions in the text entry),Mandatory (Other; please list other enforcement mechanisms in the text entry)", 
+                                                           "Mandatory with Legal Penalties (Jail Time),Mandatory with Exceptions (Please list exceptions in the text entry),Mandatory (Other; please list other enforcement mechanisms in the text entry)", 
+                                                           "Mandatory with Legal Penalties (Jail Time),Mandatory (Unspecified/Implied),Mandatory (Other; please list other enforcement mechanisms in the text entry)", 
+                                                           "Mandatory with Legal Penalties (Jail Time),Mandatory (Unspecified/Implied),Mandatory with Exceptions (Please list exceptions in the text entry)"), 
+                                   mandatory_fines = c("Mandatory with Fines", 
+                                                       "Mandatory with Fines,Mandatory with Exceptions (Please list exceptions in the text entry)", 
+                                                       "Mandatory with Fines,Mandatory (Unspecified/Implied)", 
+                                                       "Mandatory with Fines,Mandatory (Unspecified/Implied),Mandatory with Exceptions (Please list exceptions in the text entry)", 
+                                                       "Mandatory with Fines,Mandatory (Other; please list other enforcement mechanisms in the text entry)", 
+                                                       "Mandatory with Fines,Mandatory (Unspecified/Implied),Mandatory (Other; please list other enforcement mechanisms in the text entry)", 
+                                                       "Mandatory with Fines,Mandatory with Exceptions (Please list exceptions in the text entry),Mandatory (Other; please list other enforcement mechanisms in the text entry)", 
+                                                       "Mandatory with Fines,Mandatory (Unspecified/Implied),Mandatory with Exceptions (Please list exceptions in the text entry),Voluntary/Recommended but No Penalties", 
+                                                       "Mandatory with Fines,Voluntary/Recommended but No Penalties"))) %>% 
+  mutate(compliance = fct_recode(compliance, "voluntary_recommended" = "Voluntary/Recommended but No Penalties"))
 
-coronanet_china <- covid_coronanet_raw %>% 
+```
+
+## Coronanet data
+
+```{r}
+covid_coronanet_mutated %>% 
+  count(compliance, sort = T)
+
+covid_coronanet_mutated %>% 
+  count(type, compliance, sort = T)
+
+coronanet_countries <- covid_coronanet_mutated %>% 
+  filter(country %in% c("China", "Vietnam", "Taiwan", "Tanzania"))
+
+coronanet_countries %>% 
+  count(country, compliance) %>% 
+  group_by(country) %>% 
+  summarize(ratio = n / sum(n))
+
+```
+
+## Coronanet China 
+
+```{r}
+coronanet_china <- covid_coronanet_mutated %>% 
   filter(country == "China")
 
 coronanet_china %>% 
@@ -218,19 +311,42 @@ coronanet_china %>%
   count(init_country_level, sort = TRUE)
 
 coronanet_china %>% 
-  count(type, sort = T)
-  
+  count(compliance, sort = T)
+
+coronanet_china %>% 
+  count(province, sort = T)
+
+coronanet_china %>% 
+  #count(province, type, compliance) %>% 
+  filter(province == "Henan", 
+         type == "Declaration of Emergency")
+
+
+
 ```
 
 ## Stringency index
 
 ```{r}
 covid_stringency_raw %>% 
-  filter(entity %in% c("China", "Japan", "United States")) %>% 
+  filter(entity %in% c("China", "Vietnam", "Taiwan", "Tanzania")) %>% 
+  mutate(entity = fct_relevel(entity, "China", "Vietnam", "Tanzania", "Taiwan")) %>% 
   ggplot(aes(day, stringency_index, color = entity)) + 
-  geom_line(size = 1) +
+  geom_line(size = .65) +
   scale_x_date(date_breaks = "2 months", 
-               date_labels = "%Y-%m")
+               date_labels = "%Y-%m", 
+               expand = c(0, 9)) +
+  labs(title = "Comparing the stringency level of crisis responses", 
+       subtitle = "China as a case of high-cost and high-effect", 
+       x = " ", 
+       y = "Stringency index", 
+       caption = "Data Source: Oxford Covid Government Response Tracker (OxCGRT)") +
+  theme(text = element_text(family = "Times"),
+        plot.title = element_text(face = "bold", size = 15),
+        legend.position = "bottom", 
+        legend.title = element_blank(), 
+        )
+ggsave(filename = "comparing-stringency-of-crisis-response.pdf", width = 8, height = 5)
 
 ```
 

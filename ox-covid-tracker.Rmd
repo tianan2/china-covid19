@@ -1,0 +1,89 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(scales)
+library(lubridate)
+library(janitor)
+library(hrbrthemes)
+
+oxcovid_raw <- read_csv("https://raw.githubusercontent.com/OxCGRT/covid-policy-tracker/master/data/OxCGRT_latest.csv")
+
+oxcovid_raw <- oxcovid_raw %>% clean_names()
+```
+
+
+
+```{r}
+oxcovid_raw %>% count(c5_close_public_transport, sort = T)
+
+oxcovid_raw %>% count(c6_stay_at_home_requirements, sort = T)
+
+oxcovid_raw %>% count(c7_restrictions_on_internal_movement, sort = T)
+
+```
+
+
+
+```{r}
+japan_mobility_raw <- read_csv("2020_JP_Region_Mobility_Report.csv")
+
+japan_mobility_raw %>% 
+  pivot_longer(retail_and_recreation_percent_change_from_baseline:residential_percent_change_from_baseline, names_to = "category") %>% 
+  mutate(category = str_remove(category, "_percent_change_from_baseline")) %>% 
+  ggplot(aes(date, value, color = category)) +
+  geom_line(size = .1) +
+  facet_wrap(~ category, nrow = 3, scales = "free_y")
+```
+
+## plot mobility and stringency index
+
+```{r}
+stringency_japan <- covid_stringency_raw %>% 
+  filter(entity == "Japan")
+
+japan_mobility_joined <- japan_mobility_raw %>% 
+  left_join(stringency_japan, by = c("date" = "day")) %>% 
+  mutate(across(is.numeric, ~ as.numeric(scale(.)))) 
+
+japan_stringency <- japan_mobility_joined %>% 
+  select(date, stringency_index)
+```
+
+
+
+```{r}
+japan_mobility_joined %>% 
+  pivot_longer(retail_and_recreation_percent_change_from_baseline:residential_percent_change_from_baseline, names_to = "category") %>% 
+  mutate(category = str_remove(category, "_percent_change_from_baseline")) %>% 
+  ggplot(aes(date, value)) +
+  geom_line(size = .1) +
+  facet_wrap(~ category, nrow = 3, scales = "free_y") +
+  geom_line(data = japan_stringency, aes(date, stringency_index), color = "red") +
+  theme_bw()
+```
+
+## adding cor 
+
+```{r}
+japan_mobility_joined %>% 
+  filter(!is.na(parks_percent_change_from_baseline), 
+         !is.na(transit_stations_percent_change_from_baseline)) %>% 
+  mutate(cor_retail = cor(retail_and_recreation_percent_change_from_baseline, stringency_index), 
+         cor_grocery = cor(grocery_and_pharmacy_percent_change_from_baseline, stringency_index), 
+         cor_parks = cor(parks_percent_change_from_baseline, stringency_index), 
+         cor_transit = cor(transit_stations_percent_change_from_baseline, stringency_index), 
+         cor_residential = cor(residential_percent_change_from_baseline, stringency_index),
+         cor_workplace = cor(workplaces_percent_change_from_baseline, stringency_index))
+
+cor(japan_mobility_joined$workplaces_percent_change_from_baseline, japan_mobility_joined$stringency_index)
+
+```
+
