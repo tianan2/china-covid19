@@ -65,7 +65,7 @@ japan_mobility_joined %>%
   mutate(category = str_remove(category, "_percent_change_from_baseline")) %>% 
   ggplot(aes(date, value)) +
   geom_line(size = .1) +
-  facet_wrap(~ category, nrow = 3, scales = "free_y") +
+  facet_wrap(~ category, nrow = 3) +
   geom_line(data = japan_stringency, aes(date, stringency_index), color = "red") +
   theme_bw()
 ```

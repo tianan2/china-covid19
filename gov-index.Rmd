@@ -13,7 +13,8 @@ library(scales)
 library(lubridate)
 library(readxl)
 library(janitor)
-theme_set(theme_classic())
+library(countrycode)
+theme_set(theme_light())
 
 qog_bas_cs_raw <- read_csv("qog_bas_cs_jan21.csv")
 qog_bas_ts_raw <- read_csv("qog_bas_ts_jan21.csv")
@@ -23,7 +24,9 @@ bti_scores_raw <- read_excel("BTI 2020 Scores.xlsx") %>% clean_names() %>% renam
 
 ```{r}
 qog_bas_selected <- qog_bas_cs_raw %>% 
-  select(ccode, cname, ccodealp, icrg_qog, qs_closed, qs_impar, qs_proff) 
+  select(ccode, cname, ccodealp, icrg_qog, qs_closed, qs_impar, qs_proff) %>% 
+  mutate(country = countrycode(ccodealp, origin = "iso3c", destination = "country.name")) %>% 
+  mutate(country = recode(country, "Myanmar (Burma)" = "Myanmar"))
 
 ```
 
@@ -36,25 +39,89 @@ bti_selected %>%
   ggplot(aes(category, value)) +
   geom_boxplot()
 ```
+## Plotting China's position on bureaucracy index
+
+```{r}
+index_joined <- gdi_selected %>% 
+  mutate(country = countrycode(country_code, origin = "iso3c", destination = "country.name")) %>% 
+  left_join(bti_selected, by = "country") %>% 
+  left_join(qog_bas_selected, by = "country") %>% 
+  select(country, gov_effectiveness, q14_steering_capability, icrg_qog, qs_impar) %>% 
+  mutate(across(-country, ~ as.numeric(rescale(., to = c(-1, 1)))))
+
+index_joined %>% summary()
+
+china_index_joined <- index_joined %>% 
+  filter(country == "China") %>% 
+  pivot_longer(-country, names_to = "category") %>% 
+  mutate(category = fct_recode(category, 
+                               "WGI" = "gov_effectiveness", 
+                               "BTI" = "q14_steering_capability", 
+                               "ICRG" = "icrg_qog", 
+                               "QOG" = "qs_impar")) 
+
+index_joined %>% 
+  pivot_longer(-country, names_to = "category") %>% 
+  mutate(category = fct_recode(category, 
+                               "WGI" = "gov_effectiveness", 
+                               "BTI" = "q14_steering_capability", 
+                               "ICRG" = "icrg_qog", 
+                               "QOG" = "qs_impar")) %>% 
+  ggplot(aes(value, category)) +
+  geom_boxplot() +
+  geom_point(data = china_index_joined, aes(value, category), shape = 5, size = 3, color = "red") +
+  labs(title = "China's bureaucracy in comparative perspective", 
+       subtitle = "China's position on each index is marked as a diamond. The box and whisker plots show \nthe normalized range of scores for other measured countries.", 
+       y = NULL, 
+       x = NULL, 
+       caption = "Source: Normalization and graph by author. \nData from World Bank Government Indicators (WGI), Quality of Government Survey (QOG)") +
+  theme(text = element_text(family = "Times"), 
+        plot.title = element_text(face = "bold", size = 15), 
+        plot.caption = element_text(hjust = 0)) +
+  annotate("text", x = -.7, y = 1.2, label = "Government effectiveness", color = "black", family = "Times") +
+  annotate("text", x = -.7, y = 2.2, label = "Quality of government", color = "black", family = "Times") +
+  annotate("text", x = -.7, y = 3.2, label = "Steering capability", color = "black", family = "Times") +
+  annotate("text", x = -.72, y = 4.2, label = "Impartial public administration", color = "black", family = "Times")
+ggsave(filename = "figs/china_bureaucracy-in-comparative-perspective.pdf", width = 8, height = 5)
+  
+```
+
 
 
 ```{r}
-index_joind <- gdi_selected %>% 
-  left_join(bti_selected, by = c("country_name" = "country")) %>% 
-  left_join(qog_bas_selected, by = c("country_name" = "cname")) %>% 
-  select(country_name, gov_effectiveness, q14_steering_capability, icrg_qog, qs_impar) %>% 
-  mutate(across(-country_name, ~ as.numeric(scale(.))))
+gdi_filtered <- gdi_raw %>% 
+  filter(series_name %in% c("Government Effectiveness: Estimate", 
+                            "Control of Corruption: Estimate", 
+                            "Political Stability and Absence of Violence/Terrorism: Estimate", 
+                            "Regulatory Quality: Estimate", 
+                            "Rule of Law: Estimate", 
+                            "Voice and Accountability: Estimate")) %>% 
+  mutate_at(vars(matches("^x")), as.numeric) %>% 
+  pivot_longer(cols = x1996_yr1996: x2019_yr2019, names_to = "year") %>% 
+  mutate(year = as.numeric(str_extract(year, "\\d..."))) %>% 
+  mutate(series_name = str_remove(series_name, ": Estimate"), 
+         series_name = str_remove(series_name, "/Terrorism"))
 
-china_index_joined <- index_joind %>% 
+gdi_filtered %>% 
   filter(country_name == "China") %>% 
-  pivot_longer(-country_name, names_to = "category")
+  ggplot(aes(year, value, color = series_name)) +
+  geom_line(size = 1) +
+  geom_point(alpha = .8) +
+  geom_vline(xintercept = 2013, lty = "dashed") +
+  scale_x_continuous(limits = c(1995, 2020)) +
+  annotate("text", x = 2007, y = .4, label = "Xi came in here", color = "black", size = 3) +
+  facet_wrap(~ series_name) +
+  labs(subtitle = "World Bank Governance Index: China (1996-2019)", 
+       title = "Xi changed China's bureaucratic landscape",
+       x = NULL, 
+       y = NULL, 
+       caption = "Data Source: Worldwide Governance Index") +
+  theme_bw() +
+  theme(text = element_text(family = "Times"),
+        plot.title = element_text(face = "bold"),
+        legend.position = "none") 
+ggsave(filename = "figs/how_xi_changed_china_political_landscape.pdf", width = 8, height = 5)
 
-index_joind %>% 
-  pivot_longer(-country_name, names_to = "category") %>% 
-  ggplot(aes(value, category)) +
-  geom_boxplot() +
-  geom_point(data = china_index_joined, aes(value, category), shape = 5, size = 3, color = "black")
-  
 ```
 
 

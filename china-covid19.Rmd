@@ -21,7 +21,7 @@ theme_set(theme_classic())
 options(scipen = 100)
 
 ## Data Load
-covid_owid_raw <- read_csv("owid-covid-data.csv")
+covid_owid_raw <- read_csv("https://covid.ourworldindata.org/data/owid-covid-data.csv")
 covid_stringency_raw <- read_csv("covid-stringency-index.csv") %>% clean_names()
 covid_coronanet_raw <- read_csv("coronanet_release.csv")
 gdi_raw <- read_csv("f236b9a8-c325-4bf5-a685-86d3df7c8542_Data.csv") %>% clean_names()
@@ -78,7 +78,7 @@ covid_owid_joined <- covid_owid_raw %>%
   left_join(stringency_index_filtered, by = "location") %>% 
   mutate(death_rate = total_deaths / total_cases)
 
-covid_owid_present <- covid_owid_joined %>% filter(date == "2021-05-01")
+covid_owid_present <- covid_owid_joined %>% filter(date == "2021-06-01")
 ```
 
 ## Take a snapshot view of policy performance
@@ -118,6 +118,17 @@ covid_owid_joined %>%
   plot_variable(day = "2021-05-01", value, stringency_index)
 ```
 
+
+
+```{r}
+owid_filtered <- covid_owid_joined %>% 
+  filter(date < "2020-06-01")
+
+lm(stringency_index ~ new_cases_smoothed + gov_effectiveness + hospital_beds_per_thousand, data = owid_filtered) %>% 
+  summary()
+```
+
+
 ## Regression Analysis
 
 ```{r}
@@ -154,7 +165,7 @@ model_2 %>%
   theme(text = element_text(family = "Times"), 
         plot.title = element_text(face = "bold", size = 15))
 ggsave(file = "figs/does_government_effectiveness_matter.pdf", width = 8, height = 5)
-  
+
 ```
 
 ## How well has China done?
