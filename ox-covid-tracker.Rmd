@@ -16,7 +16,7 @@ library(hrbrthemes)
 
 oxcovid_raw <- read_csv("https://raw.githubusercontent.com/OxCGRT/covid-policy-tracker/master/data/OxCGRT_latest.csv")
 
-oxcovid_raw <- oxcovid_raw %>% clean_names()
+oxcovid_raw <- oxcovid_raw %>% clean_names() %>% mutate(date = ymd(date))
 ```
 
 
@@ -27,6 +27,11 @@ oxcovid_raw %>% count(c5_close_public_transport, sort = T)
 oxcovid_raw %>% count(c6_stay_at_home_requirements, sort = T)
 
 oxcovid_raw %>% count(c7_restrictions_on_internal_movement, sort = T)
+
+oxcovid_raw %>% 
+  filter(country_name == "Taiwan") %>% 
+  ggplot(aes(date, stringency_index)) +
+  geom_line()
 
 ```
 
