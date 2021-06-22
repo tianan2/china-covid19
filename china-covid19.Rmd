@@ -216,14 +216,14 @@ covid_owid_joined %>%
   geom_mark_circle(data = best_performers, color = "red") +
   scale_x_log10() +
   scale_y_continuous(labels = scales::percent_format()) +
-  labs(title = "Figure 2. Total number of confirmed cases and mortality rate", 
+  labs(title = "Fig 2. Total number of confirmed cases and mortality rate", 
        subtitle = "As of May 1, 2021",
        caption = "Data Source: Our World in Data", 
        x = "Total cases per million (log)", 
        y = "Mortality rate (%)") +
   theme(text = element_text(family = "Times"), 
-        plot.title = element_text(face = "bold", size = 15)) 
-ggsave(filename = "figs/total_cases_mortality_rate.pdf", width = 8, height = 5)
+        plot.title = element_text(face = "bold", size = 12)) 
+ggsave(filename = "figs/total_cases_mortality_rate.pdf", width = 8, height = 4)
 
 ```
 
@@ -238,16 +238,16 @@ covid_owid_joined %>%
   scale_x_date(date_breaks = "2 month", 
                date_labels = "%y-%m", 
                expand = c(0, 0)) +
-  labs(title = "Figure 1. Comparing the trend in the daily total of confirmed cases",
+  labs(title = "Fig 1. Comparing the trend in the daily total of confirmed cases",
        subtitle = "The number of new cases in China has fallen below 50 per day since Feb 2021",
        x = NULL, 
        y = "Daily total of confirmed cases (log)",
        caption = "Data Source: Our World in Data") +
-  theme(text = element_text(family = "Times", size = 13), 
+  theme(text = element_text(family = "Times", size = 12), 
         plot.title = element_text(face = "bold"), 
         legend.position = "bottom", 
         legend.title = element_blank())
-ggsave(filename = "figs/comparing_trend_number_of_new_cases.pdf", width = 8, height = 5)
+ggsave(filename = "figs/comparing_trend_number_of_new_cases.pdf", width = 8, height = 4)
 
 covid_owid_joined %>% 
   filter(location == "China") %>% 
@@ -315,24 +315,24 @@ coronanet_china %>%
 
 ```{r}
 covid_stringency_raw %>% 
-  filter(entity %in% c("China", "Vietnam", "Taiwan", "Tanzania")) %>% 
-  mutate(entity = fct_relevel(entity, "China", "Vietnam", "Tanzania", "Taiwan")) %>% 
+  filter(entity %in% c("China", "Vietnam", "Taiwan")) %>% 
+  mutate(entity = fct_relevel(entity, "China", "Vietnam", "Taiwan")) %>% 
   ggplot(aes(day, stringency_index, color = entity)) + 
   geom_line(size = .65) +
   scale_x_date(date_breaks = "2 months", 
                date_labels = "%Y-%m", 
                expand = c(0, 9)) +
-  labs(title = "Figure 3. Comparing the stringency level of crisis responses", 
+  labs(title = "Fig 3. Comparing the stringency level of crisis responses", 
        subtitle = "China as a case of high-pressure and high-effect", 
        x = " ", 
        y = "Stringency index", 
        caption = "Data Source: Oxford Covid Government Response Tracker (OxCGRT)") +
   theme(text = element_text(family = "Times"),
-        plot.title = element_text(face = "bold", size = 15),
+        plot.title = element_text(face = "bold", size = 12),
         legend.position = "bottom", 
         legend.title = element_blank(), 
         )
-ggsave(filename = "figs/comparing-stringency-of-crisis-response.pdf", width = 8, height = 5)
+ggsave(filename = "figs/comparing-stringency-of-crisis-response.pdf", width = 8, height = 4)
 
 oxcovid_raw %>% 
   filter(country_name %in% c("China", "Vietnam", "Taiwan", "Tanzania", "Russia")) %>% 
