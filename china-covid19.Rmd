@@ -89,8 +89,7 @@ oxcovid_raw
 
 
 
-
-## Our core dataset: Load and clean owid-covid19-dataset
+## Core dataset: Load and clean owid-covid19-dataset
 
 ```{r}
 covid_owid_joined <- covid_owid_raw %>%
@@ -142,25 +141,15 @@ covid_owid_joined %>%
 ```
 
 
-
-```{r}
-owid_filtered <- covid_owid_joined %>% 
-  filter(date < "2020-06-01")
-
-lm(stringency_index ~ new_cases_smoothed + gov_effectiveness + hospital_beds_per_thousand, data = owid_filtered) %>% 
-  summary()
-```
-
-
 ## Regression Analysis
 
 ```{r}
 library(effects)
 library(broom)
 
-model_1 <- lm(data = covid_owid_present, death_rate ~ log(population) + aged_65_older + gdp_per_capita + hospital_beds_per_thousand + gov_effectiveness * stringency_index)
+model_1 <- lm(data = covid_owid_present, log(death_rate) ~ log(population) + aged_65_older + log(gdp_per_capita) + hospital_beds_per_thousand + gov_effectiveness + stringency_index)
 
-model_2 <- lm(data = covid_owid_present, death_rate ~ log(population) + aged_65_older + gdp_per_capita + hospital_beds_per_thousand + gov_effectiveness * stringency_index + polity2)
+model_2 <- lm(data = covid_owid_present, log(death_rate) ~ log(population_density) + aged_65_older + log(gdp_per_capita) + hospital_beds_per_thousand + gov_effectiveness * polity2 + stringency_index)
 
 model_3 <- lm(data = covid_owid_present, total_cases_per_million ~ log(population) + aged_65_older + gdp_per_capita + hospital_beds_per_thousand + gov_effectiveness * stringency_index) 
 
@@ -168,7 +157,7 @@ model_4 <- lm(data = covid_owid_present, total_cases_per_million ~ log(populatio
 
 stargazer(model_1, model_2, model_3, model_4, type = "text")
 
-effect(term = "gov_effectiveness", mod = model_1) %>% 
+effect(term = "gov_effectiveness", mod = model_2) %>% 
   plot(type = "response", ylim=c(0,1), main = "Gov_effectiveness")
 
 model_2 %>% 
@@ -317,7 +306,7 @@ coronanet_china %>%
 covid_stringency_raw %>% 
   filter(entity %in% c("China", "Vietnam", "Taiwan")) %>% 
   mutate(entity = fct_relevel(entity, "China", "Vietnam", "Taiwan")) %>% 
-  ggplot(aes(day, stringency_index, color = entity)) + 
+  ggplot(aes(day, stringency_index, lty = entity)) + 
   geom_line(size = .65) +
   scale_x_date(date_breaks = "2 months", 
                date_labels = "%Y-%m", 
